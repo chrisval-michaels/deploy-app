@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Album API</title>
+<style>
+body { font-family: Arial; padding: 20px; }
+.album { border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
+.filter-group { margin-bottom: 15px; }
+form { margin-bottom: 20px; }
+</style>
+</head>
+<body>
+
+<h1>Album Collection</h1>
+
+<!-- Registration Form -->
+<h2>Register</h2>
+<form id="registerForm">
+  <input id="regName" placeholder="Name" required>
+  <input id="regEmail" type="email" placeholder="Email" required>
+  <input id="regPassword" type="password" placeholder="Password" required>
+  <input id="regConfirmPassword" type="password" placeholder="Confirm Password" required>
+  <button type="submit">Register</button>
+</form>
+
+<!-- Login Form -->
+<h2>Login</h2>
+<form id="loginForm">
+  <input id="loginEmail" type="email" placeholder="Email" required>
+  <input id="loginPassword" type="password" placeholder="Password" required>
+  <button type="submit">Login</button>
+</form>
+
+<!-- Logout -->
+<button id="logoutBtn" style="display:none;">Logout</button>
+<div id="welcomeMsg"></div>
+
+<!-- Add Album -->
+<h2>Add Album</h2>
+<form id="albumForm">
+  <input id="title" placeholder="Title" required>
+  <input id="artist" placeholder="Artist" required>
+  <input id="year" placeholder="Year" required>
+  <input id="genre" placeholder="Genre" required>
+  <button type="submit">Add Album</button>
+</form>
+
+<!-- Filters -->
+<h2>Filters & Sorting</h2>
+<div class="filter-group">
+  <label for="sort">Sort by:</label>
+  <select id="sort">
+    <option value="">None</option>
+    <option value="artist">Artist (A-Z)</option>
+    <option value="-year">Year (Desc)</option>
+    <option value="artist,year">Artist + Year</option>
+  </select>
+</div>
+
+<div class="filter-group">
+  <label for="yearFilter">Exact Year:</label>
+  <input id="yearFilter" type="number" placeholder="e.g. 1982">
+  <label for="startYear">Start Year:</label>
+  <input id="startYear" type="number" placeholder="Start year">
+  <label for="endYear">End Year:</label>
+  <input id="endYear" type="number" placeholder="End Year">
+</div>
+
+<div class="filter-group">
+  <label for="search">Search:</label>
+  <input id="search" placeholder="Search artist or title">
+</div>
+
+<div class="filter-group">
+  <label>Fields to display:</label>
+  <input type="checkbox" name="fields" value="title" checked> Title
+  <input type="checkbox" name="fields" value="artist" checked> Artist
+  <input type="checkbox" name="fields" value="year"> Year
+  <input type="checkbox" name="fields" value="genre"> Genre
+</div>
+
+<h2>Albums</h2>
+<div id="albums"></div>
+
+<div id="pagination">
+  <button id="prevPage">Prev</button>
+  <span id="pageInfo">Page 1</span>
+  <button id="nextPage">Next</button>
+</div>
+
+<script>
+const API_BASE = '/albums';
+let currentPage = 1;
+const pageLimit = 5;
+let currentUser = null;
+
+// ------------------- AUTH -------------------
+
+// Register
+document.getElementById('registerForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const name = document.getElementById('regName').value;
+  const email = document.getElementById('regEmail').value;
+  const password = document.getElementById('regPassword').value;
+  const confirmPassword = document.getElementById('regConfirmPassword').value;
+
+  try {
+    const res = await fetch('/users/register', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({name, email, password, confirmPassword}),
+      credentials: 'include'
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Registration failed');
+    alert('Registered! You can now login.');
+    document.getElementById('registerForm').reset();
+  } catch(err){ alert('Error: ' + err.message); }
+});
+
+// Login
+document.getElementById('loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const email = document.getElementById('loginEmail').value;
+  const password = document.getElementById('loginPassword').value;
+
+  try {
+    const res = await fetch('/users/login', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({email, password}),
+      credentials: 'include'
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Login failed');
+
+    currentUser = data.user;
+    document.getElementById('loginForm').style.display='none';
+    document.getElementById('registerForm').style.display='none';
+    document.getElementById('logoutBtn').style.display='inline';
+    document.getElementById('welcomeMsg').textContent='Welcome, '+currentUser.name;
+    alert('Login successful!');
+  } catch(err){ alert('Error: '+err.message); }
+});
+
+// Logout
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  try {
+    await fetch('/users/logout', { credentials:'include' });
+    currentUser = null;
+    document.getElementById('loginForm').style.display='block';
+    document.getElementById('registerForm').style.display='block';
+    document.getElementById('logoutBtn').style.display='none';
+    document.getElementById('welcomeMsg').textContent='';
+    alert('Logged out!');
+  } catch(err){ alert('Logout failed'); }
+});
+
+// ------------------- ALBUM CRUD -------------------
+
+document.getElementById('albumForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  if(!currentUser) return alert('You must be logged in to add albums');
+
+  const albumData = {
+    title: document.getElementById('title').value.trim(),
+    artist: document.getElementById('artist').value.trim(),
+    year: document.getElementById('year').value,
+    genre: document.getElementById('genre').value
+  };
+
+  try {
+    const res = await fetch(API_BASE, {
+      method: 'POST',
+      headers:{'Content-Type':'application/json'},
+      credentials:'include',
+      body: JSON.stringify(albumData)
+    });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Failed to add album');
+    document.getElementById('albumForm').reset();
+    currentPage=1;
+    await loadAlbums();
+    alert('Album added!');
+  } catch(err){ alert('Error: '+err.message); }
+});
+
+// Delete Album
+async function deleteAlbum(id){
+  try {
+    const res = await fetch(`${API_BASE}/${id}`, {method:'DELETE', credentials:'include'});
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error || 'Delete failed');
+    await loadAlbums();
+  } catch(err){ alert('Error: '+err.message); }
+}
+
+// Load albums
+async function loadAlbums(){
+  const params=new URLSearchParams();
+  const sort=document.getElementById('sort').value;
+  if(sort) params.append('sort',sort);
+  const year=document.getElementById('yearFilter').value;
+  if(year) params.append('year',year);
+  const startYear=document.getElementById('startYear').value;
+  const endYear=document.getElementById('endYear').value;
+  if(startYear&&endYear){ params.append('startYear',startYear); params.append('endYear',endYear);}
+  const search=document.getElementById('search').value;
+  if(search) params.append('search',search);
+  const fields=[...document.querySelectorAll('input[name="fields"]:checked')].map(f=>f.value).join(',');
+  if(fields) params.append('fields',fields);
+  params.append('page',currentPage);
+  params.append('limit',pageLimit);
+
+  try {
+    const res = await fetch(API_BASE+'?'+params.toString(), {credentials:'include'});
+    const result = await res.json();
+    displayAlbums(result.albums);
+    updatePagination({page: result.currentPage, pages: result.totalPages});
+  } catch(err){ console.error(err); document.getElementById('albums').innerHTML='<p style="color:red">Failed to load albums</p>';}
+}
+
+function displayAlbums(albums){
+  const container=document.getElementById('albums');
+  if(!albums || albums.length===0){ container.innerHTML='<p>No albums found.</p>'; return;}
+  container.innerHTML=albums.map(album=>`
+    <div class="album">
+      <h3>${album.title}</h3>
+      <p>Artist: ${album.artist}</p>
+      <p>Year: ${album.year}</p>
+      <p>Genre: ${album.genre}</p>
+      ${(currentUser && (currentUser.role==='admin' || currentUser.id===album.userId))? `<button onclick="deleteAlbum('${album._id}')">Delete</button>`:''}
+    </div>
+  `).join('');
+}
+
+function updatePagination(meta){
+  document.getElementById('pageInfo').textContent=`Page ${meta.page} of ${meta.pages}`;
+  document.getElementById('prevPage').disabled=meta.page<=1;
+  document.getElementById('nextPage').disabled=meta.page>=meta.pages;
+}
+
+document.getElementById('prevPage').addEventListener('click',()=>{ if(currentPage>1) currentPage--; loadAlbums();});
+document.getElementById('nextPage').addEventListener('click',()=>{ currentPage++; loadAlbums();});
+document.getElementById('sort').addEventListener('change',()=>{ currentPage=1; loadAlbums();});
+document.getElementById('yearFilter').addEventListener('input',()=>{ currentPage=1; loadAlbums();});
+document.getElementById('startYear').addEventListener('input',()=>{ currentPage=1; loadAlbums();});
+document.getElementById('endYear').addEventListener('input',()=>{ currentPage=1; loadAlbums();});
+document.getElementById('search').addEventListener('input',()=>{ currentPage=1; loadAlbums();});
+document.querySelectorAll('input[name="fields"]').forEach(f=>f.addEventListener('change',()=>{ currentPage=1; loadAlbums();}));
+
+loadAlbums();
+</script>
+</body>
+</html>

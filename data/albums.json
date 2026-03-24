@@ -1,0 +1,17 @@
+[
+  {
+    "id": 4,
+    "artist": "Pink Floyd",
+    "title": "The Wall",
+    "year": 1979,
+    "genre": "Progressive Rock",
+    "tracks": 26
+  },
+  {
+    "id": 5,
+    "title": "ag1563",
+    "artist": "jamk student",
+    "year": "2026",
+    "genre": "test"
+  }
+]
