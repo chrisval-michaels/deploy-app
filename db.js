@@ -1,14 +1,13 @@
-// db.js
 import mongoose from 'mongoose';
 
-const MONGO_URI = 'mongodb+srv://backend-user:backend4040@backend.9pm5ex2.mongodb.net/backend-data?appName=Backend';
+const MONGO_URI = process.env.MONGO_URI; // read from env
 
 export const connectDB = async () => {
   try {
     await mongoose.connect(MONGO_URI);
-    console.log("MongoDB Connected (Albums API)");
+    console.log("MongoDB Connected");
   } catch (error) {
     console.error("MongoDB Connection Failed:", error.message);
-    process.exit(1); // Exit if DB fails
+    process.exit(1);
   }
 };

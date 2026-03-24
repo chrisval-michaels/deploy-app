@@ -2,39 +2,37 @@ import express from 'express';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
 import albumRoutes from './routes/albums.js';
-import userRoutes from './routes/UserRoute.js'; 
+import userRoutes from './routes/UserRoute.js';
 import { requestLogger } from './middleware/requestLogger.js';
-import passport from './utils/passportConfig.js'; 
+import passport from './utils/passportConfig.js';
 import { connectDB } from './db.js';
 
 const app = express();
-const PORT = 3000;
 
-// Connect to Database
-connectDB();
+// Connect to Database only if not in test environment
+if (process.env.NODE_ENV !== 'test') {
+  connectDB();
+}
 
 // Middleware
 app.use(express.json());
 app.use(requestLogger);
 app.use(express.static('public'));
 
-// Sessions
+// Sessions – use environment variables for secret and database URI
 app.use(session({
-  secret: 'yourSecretKey123',           // Change to a strong secret
+  secret: process.env.SESSION_SECRET || 'yourSecretKey123', // fallback for dev
   resave: false,
   saveUninitialized: false,
-  store: MongoStore.create({ mongoUrl: 'mongodb+srv://backend-user:backend4040@backend.9pm5ex2.mongodb.net/backend-data?appName=Backend' }),
+  store: MongoStore.create({ mongoUrl: process.env.MONGO_URI }), // read from env
   cookie: { maxAge: 1000 * 60 * 60 }   // 1 hour session
 }));
 
 app.use(passport.initialize());
-app.use(passport.session()); 
+app.use(passport.session());
 
 // Routes
 app.use('/albums', albumRoutes);
 app.use('/users', userRoutes);
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-});
+export default app; // <-- important: export app for testing and server.js
